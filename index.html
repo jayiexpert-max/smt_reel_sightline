@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>มุมมองป้ายรีล SMT และเส้นสายตา</title>
+  <style>
+    :root {
+      --bg: #efe8dc;
+      --paper: #fbf7f0;
+      --ink: #1c2328;
+      --muted: #5c656c;
+      --line: #d5cbb8;
+      --orange: #c45c26;
+      --orange-soft: #f3d8c4;
+      --dim: #0b6e99;
+      --pass: #1f6b4a;
+      --pass-bg: #e3f3ea;
+      --fail: #9b2226;
+      --fail-bg: #f8e4e4;
+      --warn: #8a5a12;
+      --warn-bg: #f7edd4;
+      --shadow: 0 10px 28px rgba(28, 35, 40, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Sarabun", "Noto Sans Thai", "Leelawadee UI", "Tahoma", sans-serif;
+    }
+
+    header {
+      background: #172026;
+      color: #f4efe6;
+      padding: 28px 28px 24px;
+      border-bottom: 4px solid var(--orange);
+    }
+
+    header p {
+      margin: 8px 0 0;
+      max-width: 76ch;
+      color: #c9c0b3;
+      line-height: 1.55;
+    }
+
+    h1, h2, h3 { margin: 0; font-weight: 700; }
+    h1 { font-size: clamp(1.45rem, 3vw, 2rem); letter-spacing: -0.02em; }
+    h2 { font-size: 1.05rem; }
+
+    main {
+      width: min(1220px, calc(100% - 32px));
+      margin: 24px auto 48px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(240px, 340px) 1fr;
+      overflow: hidden;
+    }
+
+    figure {
+      margin: 0;
+      background: #111;
+      position: relative;
+      min-height: 260px;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    figure .fallback {
+      display: none;
+      place-items: center;
+      min-height: 260px;
+      color: #ddd;
+      padding: 24px;
+      text-align: center;
+    }
+
+    figure.is-empty img { display: none; }
+    figure.is-empty .fallback { display: grid; }
+
+    figcaption {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      background: rgba(23, 32, 38, 0.82);
+      color: #fff;
+      font-size: 0.82rem;
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+
+    .metrics { padding: 20px 22px; display: grid; gap: 12px; }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    .status.pass { background: var(--pass-bg); color: var(--pass); }
+    .status.fail { background: var(--fail-bg); color: var(--fail); }
+    .status.warn { background: var(--warn-bg); color: var(--warn); }
+    .status.empty { background: #eeeae2; color: var(--muted); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #fff;
+    }
+
+    .card span { display: block; color: var(--muted); font-size: 0.82rem; }
+    .card strong {
+      display: block;
+      margin-top: 4px;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 1.3rem;
+    }
+    .card em { font-style: normal; color: var(--muted); font-size: 0.78rem; }
+
+    .row-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .row-table th, .row-table td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .row-table th {
+      background: #f3eee4;
+      font-weight: 600;
+    }
+
+    .row-table td.num {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      white-space: nowrap;
+    }
+
+    .ok { color: var(--pass); font-weight: 700; }
+    .bad { color: var(--fail); font-weight: 700; }
+
+    .controls { padding: 20px 22px 8px; }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .chip.active, .chip:hover {
+      border-color: var(--orange);
+      background: var(--orange-soft);
+    }
+
+    .btn-export {
+      margin-left: auto;
+      border: 0;
+      background: var(--orange);
+      color: #fff;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-export:hover { filter: brightness(1.05); }
+    .btn-export:disabled { opacity: 0.65; cursor: wait; }
+
+    header .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    header .btn-export, header .btn-download {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .btn-download {
+      border: 1px solid #c9c0b3;
+      background: #f4efe6;
+      color: #172026;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-download:hover { filter: brightness(1.05); }
+
+    .sliders {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 22px;
+    }
+
+    label.field {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2px 12px;
+      padding: 10px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    label.field span.value {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--orange);
+      font-weight: 600;
+    }
+
+    label.field input {
+      grid-column: 1 / -1;
+      width: 100%;
+      accent-color: var(--orange);
+    }
+
+    .drawings {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 18px;
+    }
+
+    .drawing {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .drawing .title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+    }
+
+    .hint { color: var(--muted); font-size: 0.82rem; }
+
+    .canvas {
+      height: 540px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background:
+        linear-gradient(#ebe4d6 1px, transparent 1px),
+        linear-gradient(90deg, #ebe4d6 1px, transparent 1px),
+        #fff;
+      background-size: 24px 24px;
+    }
+
+    .canvas svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .formula { padding: 20px 22px; }
+    .formula ol {
+      margin: 10px 0 0;
+      padding-left: 1.2rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .formula code {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1px 6px;
+      color: var(--ink);
+    }
+
+    footer {
+      width: min(1220px, calc(100% - 32px));
+      margin: 0 auto 32px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 900px) {
+      .hero, .drawings, .sliders, .cards { grid-template-columns: 1fr; }
+      .canvas { height: 420px; }
+      header { padding: 22px 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>มุมมองป้ายรีล SMT และเส้นสายตา</h1>
+    <p>
+      แบบร่างด้านหน้า ด้านข้าง และเส้นสายตาตรงของกล่องรีล 4 แถว
+      ใช้มุมมองระดับตาเป็นหลัก คำนวณว่าป้ายแถว 2, 3 และ 4 ต้องสูงขึ้นเท่าใดจึงอ่านรหัสได้เมื่อมองตรง ไม่ใช้มุมก้มเป็นเกณฑ์หลัก
+    </p>
+    <div class="hero-actions">
+      <a class="btn-download" href="smt_reel_sightline.zip" download="smt_reel_sightline.zip">ดาวน์โหลดโปรเจค (.zip)</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel hero">
+      <figure id="photoWrap">
+        <img id="photo" src="assets/reel-tote.png" alt="กล่อง ESD ใส่รีล SMT พร้อมป้ายรหัส" />
+        <div class="fallback">ไม่พบรูปต้นฉบับ ตรวจไฟล์ assets/reel-tote.png</div>
+        <figcaption>รูปอ้างอิง — ขยายแบบร่างเป็น 4 แถว</figcaption>
+      </figure>
+      <div class="metrics">
+        <h2>ผลคำนวณมุมองศาและความสูง</h2>
+        <div id="status" class="status empty">กำลังโหลดค่าตั้งต้น…</div>
+        <div class="cards">
+          <div class="card">
+            <span>มุมมองถึงขอบบนรีล (แถว 1)</span>
+            <strong id="outTheta">—</strong>
+            <em>จากแนวราบ ลง/ขึ้นสู่ป้ายแถว 1</em>
+          </div>
+          <div class="card">
+            <span>ป้ายแถว 1 = ขอบบนรีล</span>
+            <strong id="outH1">—</strong>
+            <em>จากพื้นโต๊ะ ถึงขอบบนของตัวรีล</em>
+          </div>
+        </div>
+        <table class="row-table">
+          <thead>
+            <tr>
+              <th>แถว</th>
+              <th>Stockcode</th>
+              <th>มุม</th>
+              <th>สูงกว่าแถว 1</th>
+              <th>ยอดป้ายขั้นต่ำ</th>
+              <th>โผล่พ้นแถวหน้า</th>
+              <th>สถานะด้านหน้า</th>
+            </tr>
+          </thead>
+          <tbody id="rowBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="drawings">
+      <article class="panel drawing">
+        <div class="title">
+          <h2>มุมมองด้านหน้า</h2>
+          <span class="hint">ไล่ระดับแบบอัฒจันทร์ ป้ายใบเท่ากัน โผล่พ้นแถวหน้าทีละขั้น</span>
+        </div>
+        <div class="canvas" id="frontCanvas"></div>
+      </article>
+      <article class="panel drawing">
+        <div class="title">
+          <h2>มุมมองด้านข้างและเส้นสายตา</h2>
+          <span class="hint">สายตาตรงผ่านขอบบนรีล ปรับโหมดด้านล่างถ้าป้ายสูงเกิน</span>
+        </div>
+        <div class="canvas" id="sideCanvas"></div>
+      </article>
+    </section>
+
+    <section class="panel controls">
+      <div class="toolbar">
+        <h2>ตั้งค่าตำแหน่งมอง</h2>
+        <button type="button" class="chip active" data-preset="rake">ไล่ระดับอัฒจันทร์</button>
+        <button type="button" class="chip" data-preset="stagger">เยื้องป้าย</button>
+        <button type="button" class="chip" data-preset="stand">ยืนที่โต๊ะ</button>
+        <button type="button" class="chip" data-preset="sit">นั่งที่โต๊ะ</button>
+        <a class="btn-download" href="smt_reel_sightline.zip" download="smt_reel_sightline.zip">ดาวน์โหลดโปรเจค (.zip)</a>
+        <button type="button" class="btn-export" id="exportBtn">ส่งออก HTML</button>
+      </div>
+      <div class="sliders" id="sliders"></div>
+    </section>
+
+    <section class="panel formula">
+      <h2>ทำอย่างไรไม่ให้ป้ายสูงเกิน</h2>
+      <ol>
+        <li>เหมือนอัฒจันทร์: ป้ายใบเท่ากัน แถว 2 ใช้ระยะแรกใหญ่กว่า (พ้นขอบบนรีลชัด) แล้วแถว 3–4 ไล่ด้วยค่า <code>C</code></li>
+        <li>แถว 2 <code>h2 = ขอบบนรีล + C1</code> แถวถัดไป <code>hn = h2 + (n − 2) · C</code> ปรับ C1 และระยะลึกแถว 1→2 ได้กว้าง</li>
+        <li>มุมแต่ละแถว <code>θ = arctan((He − hn) / Dn)</code> บวก = ก้ม ลบ = เงย 0° = ตรง</li>
+        <li>ถ้ายังสูงไป ให้ลด <code>C</code> หรือใช้โหมดเยื้องป้าย</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    ค่าตั้งต้นใช้รีล 7 นิ้ว (Ø 178 มม.) กล่องลึกประมาณ 300 มม. วางรีล 4 แถว ปรับสไลเดอร์ให้ตรงของจริงในไลน์ได้
+  </footer>
+
+  <script>
+    const ROW_COUNT = 4;
+    const TOTE_W = 400;
+    const TOTE_D = 300;
+    const STOCK = [
+      ["8041STC6000188", "1051STR2002009"],
+      ["8041STC6000189", "1051STR2002010"],
+      ["8041STC6000190", "1051STR2002012"],
+      ["8041STC6000191", "1051STR2002011"]
+    ];
+
+    const FIELDS = [
+      { key: "eyeHeight", label: "ความสูงตาจากพื้น", unit: "มม.", min: 850, max: 1800, step: 10, value: 978 },
+      { key: "tableHeight", label: "ความสูงโต๊ะ", unit: "มม.", min: 680, max: 950, step: 10, value: 800 },
+      { key: "viewDistance", label: "ระยะมองถึงป้ายแถว 1 (D1)", unit: "มม.", min: 250, max: 1600, step: 10, value: 600 },
+      { key: "reelDiameter", label: "เส้นผ่านศูนย์กลางรีล (ขอบบน = ป้ายแถว 1)", unit: "มม.", min: 178, max: 330, step: 1, value: 178 },
+      { key: "firstPitch", label: "ระยะลึกแถว 1 → แถว 2", unit: "มม.", min: 50, max: 200, step: 5, value: 100 },
+      { key: "rowPitch", label: "ระยะลึกแถว 2 → 3 และ 3 → 4", unit: "มม.", min: 40, max: 180, step: 5, value: 80 },
+      { key: "firstStep", label: "ระยะสูงแถว 1 → แถว 2", unit: "มม.", min: 0, max: 120, step: 2, value: 48 },
+      { key: "stepHeight", label: "ค่า C แถวถัดไป (3 และ 4)", unit: "มม.", min: 0, max: 60, step: 1, value: 25 }
+    ];
+
+    const ROW_COLORS = ["#fff7e8", "#f3d08a", "#e0893c", "#c45c26"];
+    const ROW_INK = ["#1c2328", "#1c2328", "#fff", "#fff"];
+
+    const TAG_H = 25;
+    const MIN_PEEK = 25;
+
+    const PRESETS = {
+      rake: { layout: "rake", eyeHeight: 978, tableHeight: 800, viewDistance: 600, firstPitch: 100, rowPitch: 80, firstStep: 48, stepHeight: 25 },
+      stagger: { layout: "stagger", eyeHeight: 978, tableHeight: 800, viewDistance: 600, firstPitch: 100, rowPitch: 80, firstStep: 48, stepHeight: 25 },
+      stand: { eyeHeight: 1550, tableHeight: 800, viewDistance: 600 },
+      sit: { eyeHeight: 1200, tableHeight: 800, viewDistance: 500 }
+    };
+
+    const state = Object.fromEntries(FIELDS.map((field) => [field.key, field.value]));
+    state.layout = "rake";
+    const sliders = document.getElementById("sliders");
+    sliders.innerHTML = FIELDS.map((field) => `
+      <label class="field">
+        ${field.label}
+        <span class="value" data-for="${field.key}">${field.value} ${field.unit}</span>
+        <input type="range" name="${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" value="${field.value}" />
+      </label>
+    `).join("");
+
+    const photo = document.getElementById("photo");
+    const photoWrap = document.getElementById("photoWrap");
+    photo.addEventListener("error", () => photoWrap.classList.add("is-empty"));
+    photo.addEventListener("load", () => photoWrap.classList.remove("is-empty"));
+
+    function fmt(mm, digits = 0) {
+      return `${Number(mm).toFixed(digits)} มม.`;
+    }
+
+    function fmtAngle(deg) {
+      const abs = Math.abs(deg);
+      if (abs < 0.3) return "0.0° ตรง";
+      return `${deg > 0 ? "ก้ม" : "เงย"} ${abs.toFixed(1)}°`;
+    }
+
+    function clamp(n, min, max) {
+      return Math.min(max, Math.max(min, n));
+    }
+
+    function compute(p) {
+      p = { ...p, layout: p.layout || "rake" };
+      const toteHeight = clamp(Math.round(p.reelDiameter * 0.72), 110, 200);
+      const hReelTop = p.tableHeight + p.reelDiameter;
+      const h1 = hReelTop;
+      const D1 = p.viewDistance;
+      const He = p.eyeHeight;
+      if (!(D1 > 0)) {
+        return { ok: false, toteHeight, hReelTop, h1, D1, He, rows: [], p };
+      }
+
+      const rise = He - h1;
+      const offStraightDeg = Math.atan2(rise, D1) * 180 / Math.PI;
+
+      const rows = [];
+      for (let i = 0; i < ROW_COUNT; i += 1) {
+        const D = i === 0 ? D1 : D1 + p.firstPitch + (i - 1) * p.rowPitch;
+        const rake = (p.layout || state.layout) !== "stagger";
+        const step = i === 0
+          ? 0
+          : rake
+            ? p.firstStep + (i - 1) * p.stepHeight
+            : p.firstStep;
+        const hMinTable = p.reelDiameter + step;
+        const hMin = p.tableHeight + hMinTable;
+        const thetaRad = Math.atan2(He - hMin, D);
+        const thetaDeg = thetaRad * 180 / Math.PI;
+        rows.push({
+          n: i + 1,
+          D,
+          step,
+          hMin,
+          hMinTable,
+          cardMin: step,
+          hActual: hMin,
+          hActualTable: hMinTable,
+          thetaRad,
+          thetaDeg,
+          peekFront: 0,
+          peekEye: 0,
+          readableFront: true,
+          readableEye: true
+        });
+      }
+
+      rows.forEach((row, i) => {
+        if (i === 0) {
+          row.peekFront = Infinity;
+          row.peekEye = Infinity;
+          row.readableFront = true;
+          row.readableEye = true;
+          return;
+        }
+        const prev = p.layout === "stagger" ? rows[0] : rows[i - 1];
+        row.peekFront = row.hMin - prev.hMin;
+        const need = TAG_H;
+        row.readableFront = row.peekFront >= need;
+        row.needPeek = need;
+
+        let yBlock = -Infinity;
+        const occluders = (p.layout === "stagger") ? [rows[0]] : rows.slice(0, i);
+        occluders.forEach((front) => {
+          const yG = He + (front.hMin - He) * (row.D / front.D);
+          if (yG > yBlock) yBlock = yG;
+        });
+        row.peekEye = row.hMin - yBlock;
+        row.readableEye = row.peekEye >= need;
+        row.readable = row.readableFront;
+      });
+
+      return {
+        ok: true,
+        toteHeight,
+        hReelTop,
+        h1,
+        D1,
+        He,
+        offStraightDeg,
+        rows,
+        p
+      };
+    }
+
+    function updateStatus(result) {
+      const status = document.getElementById("status");
+      const body = document.getElementById("rowBody");
+
+      if (!result.ok) {
+        status.className = "status empty";
+        status.textContent = "ใส่ระยะมองให้มากกว่า 0 เพื่อคำนวณมุมและความสูงป้าย";
+        document.getElementById("outTheta").textContent = "—";
+        document.getElementById("outH1").textContent = "—";
+        body.innerHTML = "";
+        return;
+      }
+
+      document.getElementById("outTheta").textContent = fmtAngle(result.rows[0].thetaDeg);
+      document.getElementById("outH1").textContent = fmt(result.h1 - result.p.tableHeight);
+
+      body.innerHTML = result.rows.map((row) => {
+        const statusCell = row.n === 1
+          ? '<span class="ok">ขอบบนรีล</span>'
+          : row.readableFront
+            ? `<span class="ok">เห็น · โผล่ ${fmt(row.peekFront)}</span>`
+            : `<span class="bad">ถูกบัง · โผล่ ${fmt(row.peekFront)} / ต้อง ${fmt(row.needPeek)}</span>`;
+        return `<tr>
+          <td>แถว ${row.n}</td>
+          <td class="num">${STOCK[row.n - 1][0]} / ${STOCK[row.n - 1][1]}</td>
+          <td class="num">${fmtAngle(row.thetaDeg)}</td>
+          <td class="num">${row.n === 1 ? "—" : "+" + fmt(row.step)}</td>
+          <td class="num">${fmt(row.hMinTable)}</td>
+          <td class="num">${row.n === 1 ? "—" : fmt(row.peekFront)}</td>
+          <td>${statusCell}</td>
+        </tr>`;
+      }).join("");
+
+      const off = result.offStraightDeg;
+      const offNote = Math.abs(off) < 1.5
+        ? "ตาอยู่ในระดับสายตาตรง"
+        : off > 0
+          ? `ตาสูงกว่าขอบบนรีล ${fmt(result.He - result.h1)} มุมแถว 1 คือ ${fmtAngle(result.rows[0].thetaDeg)}`
+          : `ตาต่ำกว่าขอบบนรีล ${fmt(result.h1 - result.He)} มุมแถว 1 คือ ${fmtAngle(result.rows[0].thetaDeg)}`;
+
+      const r2 = result.rows[1];
+      const r3 = result.rows[2];
+      const r4 = result.rows[3];
+      const layout = result.p.layout || state.layout;
+      const spec = layout === "stagger"
+        ? `เยื้องป้าย แถว 2–4 โผล่เท่ากัน +${fmt(result.p.firstStep)} มุม ${fmtAngle(r2.thetaDeg)} / ${fmtAngle(r3.thetaDeg)} / ${fmtAngle(r4.thetaDeg)}`
+        : `ไล่ระดับอัฒจันทร์ แถว 2/3/4 สูงกว่าขอบบน +${fmt(r2.step)} / +${fmt(r3.step)} / +${fmt(r4.step)} มุม ${fmtAngle(r2.thetaDeg)} / ${fmtAngle(r3.thetaDeg)} / ${fmtAngle(r4.thetaDeg)}`;
+      const blocked = result.rows.filter((row) => row.n > 1 && !row.readableFront);
+      if (blocked.length) {
+        status.className = "status fail";
+        status.textContent = `ถูกบัง: แถว ${blocked.map((row) => `${row.n} โผล่ ${fmt(row.peekFront)} ต้อง ${fmt(row.needPeek)}`).join(" · ")} — เลื่อนระยะสูงแถว 1→2 หรือค่า C ให้มากกว่าความสูงใบป้าย`;
+      } else {
+        status.className = "status pass";
+        status.textContent = `${spec} · ${offNote} · มุมด้านหน้าเห็น Stockcode ทั้ง 4 แถว`;
+      }
+    }
+
+    function svgEl(name, attrs, text) {
+      const pairs = Object.entries(attrs)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => `${key}="${String(value).replace(/"/g, "&quot;")}"`)
+        .join(" ");
+      if (text === undefined) return `<${name} ${pairs} />`;
+      return `<${name} ${pairs}>${text}</${name}>`;
+    }
+
+    function dimV(x, y1, y2, label, color = "#0b6e99") {
+      const mid = (y1 + y2) / 2;
+      return [
+        svgEl("line", { x1: x, y1, x2: x, y2, stroke: color, "stroke-width": 1.2 }),
+        svgEl("line", { x1: x - 4, y1, x2: x + 4, y2: y1, stroke: color, "stroke-width": 1.2 }),
+        svgEl("line", { x1: x - 4, y1: y2, x2: x + 4, y2, stroke: color, "stroke-width": 1.2 }),
+        svgEl("text", {
+          x: x - 8, y: mid, fill: color, "font-size": 13,
+          "text-anchor": "end", "dominant-baseline": "middle",
+          "font-family": "ui-monospace, monospace"
+        }, label)
+      ].join("");
+    }
+
+    function dimH(y, x1, x2, label, color = "#0b6e99") {
+      const mid = (x1 + x2) / 2;
+      return [
+        svgEl("line", { x1, y1: y, x2, y2: y, stroke: color, "stroke-width": 1.2 }),
+        svgEl("line", { x1, y1: y - 4, x2: x1, y2: y + 4, stroke: color, "stroke-width": 1.2 }),
+        svgEl("line", { x1: x2, y1: y - 4, x2, y2: y + 4, stroke: color, "stroke-width": 1.2 }),
+        svgEl("text", {
+          x: mid, y: y + 16, fill: color, "font-size": 13,
+          "text-anchor": "middle", "font-family": "ui-monospace, monospace"
+        }, label)
+      ].join("");
+    }
+
+    function renderFront(result) {
+      const p = result.p || state;
+      const toteH = result.toteHeight;
+      const reelR = p.reelDiameter / 2;
+      const gap = 22;
+      const leftCx = TOTE_W / 2 - reelR - gap / 2;
+      const rightCx = TOTE_W / 2 + reelR + gap / 2;
+      const floor = 420;
+      const reelCy = floor - reelR;
+      const frontLip = 78;
+      const signW = 118;
+
+      const marks = [];
+      marks.push(svgEl("rect", { x: -30, y: floor, width: TOTE_W + 60, height: 16, fill: "#8b7355" }));
+      marks.push(svgEl("rect", {
+        x: 8, y: floor - toteH, width: TOTE_W - 16, height: toteH,
+        fill: "#d7d0c4", stroke: "#2a2a2a", "stroke-width": 2
+      }));
+
+      const stagger = (result.p && result.p.layout || state.layout) === "stagger";
+      const rimY = reelCy - reelR;
+      for (let i = ROW_COUNT - 1; i >= 1; i -= 1) {
+        const row = result.rows && result.rows[i];
+        const rise = row ? row.step : p.firstStep + (i - 1) * p.stepHeight;
+        const top = rimY - rise;
+        [leftCx, rightCx].forEach((cx, col) => {
+          const x = stagger
+            ? cx - 120 + (i - 1) * 42
+            : cx - signW / 2 + (i - 1.5) * 6;
+          const blocked = row && !row.readableFront;
+          marks.push(svgEl("rect", {
+            x, y: top, width: signW, height: TAG_H,
+            fill: blocked ? "#d9d3c9" : ROW_COLORS[i],
+            stroke: blocked ? "#9b2226" : "#1c2328",
+            "stroke-width": 1.4,
+            "stroke-dasharray": blocked ? "4 3" : undefined
+          }));
+          marks.push(svgEl("text", {
+            x: x + signW / 2, y: top + 12,
+            "text-anchor": "middle",
+            fill: blocked ? "#9b2226" : ROW_INK[i],
+            "font-size": 9,
+            "font-weight": 700,
+            "font-family": "ui-monospace, monospace"
+          }, blocked ? "ถูกบัง" : STOCK[i][col]));
+          marks.push(svgEl("text", {
+            x: x + signW / 2, y: top + 23,
+            "text-anchor": "middle",
+            fill: blocked ? "#9b2226" : ROW_INK[i],
+            "font-size": 9
+          }, `แถว ${i + 1}`));
+        });
+      }
+
+      [leftCx, rightCx].forEach((cx, col) => {
+        marks.push(svgEl("circle", {
+          cx, cy: reelCy, r: reelR, fill: "#f7f4ee", stroke: "#2d3338", "stroke-width": 2.2
+        }));
+        marks.push(svgEl("circle", { cx, cy: reelCy, r: 12, fill: "#fff", stroke: "#2d3338" }));
+        const tabH = TAG_H;
+        marks.push(svgEl("rect", {
+          x: cx - 40, y: rimY - tabH, width: 80, height: tabH,
+          fill: "#fff", stroke: "#1c2328", "stroke-width": 1.5
+        }));
+        marks.push(svgEl("line", {
+          x1: cx - 36, y1: rimY, x2: cx + 36, y2: rimY,
+          stroke: "#c45c26", "stroke-width": 2.4
+        }));
+        marks.push(svgEl("text", {
+          x: cx, y: rimY - 16,
+          "text-anchor": "middle",
+          fill: "#1c2328",
+          "font-size": 8,
+          "font-family": "ui-monospace, monospace"
+        }, STOCK[0][col]));
+        marks.push(svgEl("text", {
+          x: cx, y: rimY - 5,
+          "text-anchor": "middle",
+          fill: "#c45c26",
+          "font-size": 10,
+          "font-weight": 700
+        }, "แถว 1 · ขอบบน"));
+      });
+
+      marks.push(svgEl("path", {
+        d: `M0 ${floor - frontLip} H${TOTE_W} V${floor} H0 Z M28 ${floor - frontLip + 18} H${TOTE_W - 28} V${floor - 14} H28 Z`,
+        fill: "#1f1f1f",
+        "fill-rule": "evenodd"
+      }));
+      marks.push(svgEl("rect", { x: 0, y: floor - toteH, width: 14, height: toteH, fill: "#2a2a2a" }));
+      marks.push(svgEl("rect", { x: TOTE_W - 14, y: floor - toteH, width: 14, height: toteH, fill: "#2a2a2a" }));
+
+      marks.push(dimV(-18, floor, floor - p.reelDiameter, `ขอบบน ${fmt(p.reelDiameter)}`));
+      if (result.rows && result.rows[3]) {
+        marks.push(dimV(TOTE_W + 22, floor - p.reelDiameter, floor - result.rows[3].hMinTable, `แถว 4 +${fmt(result.rows[3].step)}`));
+      }
+      marks.push(dimH(floor + 28, 0, TOTE_W, `กว้างกล่อง ${fmt(TOTE_W)} · 4 แถวลึก`));
+
+      return `<svg viewBox="-80 0 560 470" xmlns="http://www.w3.org/2000/svg">${marks.join("")}</svg>`;
+    }
+
+    function renderSide(result) {
+      if (!result.ok) {
+        return `<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">${
+          svgEl("text", { x: 320, y: 180, "text-anchor": "middle", fill: "#5c656c", "font-size": 18 }, "รอระยะมองที่ใช้งานได้")
+        }</svg>`;
+      }
+
+      const p = result.p;
+      const allOk = result.rows.slice(1).every((row) => row.readableFront);
+      const color = allOk ? "#c45c26" : "#9b2226";
+      const h1t = p.reelDiameter;
+      const theta1 = result.rows[0].thetaRad;
+      const drawDist = 200;
+      const frontX = 260;
+      const reelW = 36;
+      const tableY = 460;
+      const eyeH = h1t + drawDist * Math.tan(theta1);
+      const maxH = Math.max(result.rows[3].hMinTable, eyeH, h1t) + 55;
+      const scale = 340 / maxH;
+      const toX = (worldX) => frontX + (worldX - result.D1);
+      const toY = (heightFromTable) => tableY - heightFromTable * scale;
+      const eyeX = frontX - drawDist;
+      const eyeY = toY(eyeH);
+      const last = result.rows[result.rows.length - 1];
+      const rimX = toX(result.D1);
+      const rimY = toY(h1t);
+      const endX = toX(last.D) + 110;
+
+      const marks = [];
+      marks.push(svgEl("rect", { x: 40, y: tableY, width: 620, height: 18, fill: "#8b7355" }));
+      marks.push(svgEl("rect", {
+        x: frontX - 24,
+        y: toY(result.toteHeight),
+        width: TOTE_D * scale + 20,
+        height: result.toteHeight * scale,
+        fill: "#2a2a2a",
+        opacity: 0.12,
+        stroke: "#2a2a2a"
+      }));
+
+      result.rows.forEach((row) => {
+        const x = toX(row.D);
+        const reelTop = toY(p.reelDiameter);
+        const reelBot = toY(0);
+        marks.push(svgEl("rect", {
+          x: x - reelW / 2,
+          y: reelTop,
+          width: reelW,
+          height: reelBot - reelTop,
+          fill: "#f7f4ee",
+          stroke: "#1c2328",
+          "stroke-width": 1.5,
+          rx: 4
+        }));
+        if (row.n === 1) {
+          marks.push(svgEl("rect", {
+            x: x - 26, y: reelTop - TAG_H * scale, width: 52, height: TAG_H * scale,
+            fill: "#fff", stroke: "#1c2328", "stroke-width": 1.3
+          }));
+          marks.push(svgEl("line", {
+            x1: x - 22, y1: reelTop, x2: x + 22, y2: reelTop,
+            stroke: "#c45c26", "stroke-width": 2.4
+          }));
+          marks.push(svgEl("text", {
+            x, y: reelTop - 5,
+            "text-anchor": "middle",
+            "font-size": 8,
+            "font-weight": 700,
+            "font-family": "ui-monospace, monospace",
+            fill: "#c45c26"
+          }, STOCK[0][0]));
+        } else {
+          const stepTop = toY(row.hMinTable);
+          const stepBot = toY(Math.max(0, row.hMinTable - TAG_H));
+          const prevH = result.rows[row.n - 2].hMinTable;
+          marks.push(svgEl("rect", {
+            x: x - 22,
+            y: toY(row.hMinTable),
+            width: 44,
+            height: Math.max(4, toY(prevH) - toY(row.hMinTable)),
+            fill: "#c8b89a",
+            stroke: "#6b5b43",
+            "stroke-width": 1
+          }));
+          marks.push(svgEl("rect", {
+            x: x - 36,
+            y: stepTop,
+            width: 72,
+            height: Math.max(16, stepBot - stepTop),
+            fill: ROW_COLORS[row.n - 1],
+            stroke: "#1c2328",
+            "stroke-width": 1.4
+          }));
+          marks.push(svgEl("text", {
+            x, y: stepTop + 12,
+            "text-anchor": "middle",
+            "font-size": 8,
+            "font-weight": 700,
+            "font-family": "ui-monospace, monospace",
+            fill: ROW_INK[row.n - 1]
+          }, STOCK[row.n - 1][0]));
+        }
+        marks.push(svgEl("circle", {
+          cx: x, cy: toY(row.hMinTable), r: 4.5,
+          fill: row.n === 1 ? color : "#0b6e99"
+        }));
+        marks.push(svgEl("text", {
+          x: x + 42, y: toY(row.hMinTable) - 8,
+          fill: "#0b6e99",
+          "font-size": 11,
+          "font-weight": 700,
+          "font-family": "ui-monospace, monospace"
+        }, `${STOCK[row.n - 1][0]}  ${fmtAngle(row.thetaDeg)}`));
+      });
+
+      marks.push(svgEl("line", {
+        x1: eyeX, y1: eyeY, x2: endX, y2: eyeY,
+        stroke: "#98a0a6", "stroke-width": 1.2, "stroke-dasharray": "5 4"
+      }));
+      const slope = (rimY - eyeY) / ((rimX - eyeX) || 1);
+      marks.push(svgEl("line", {
+        x1: eyeX, y1: eyeY, x2: endX, y2: eyeY + (endX - eyeX) * slope,
+        stroke: color, "stroke-width": 2.4, "stroke-dasharray": "8 5"
+      }));
+      result.rows.forEach((row) => {
+        marks.push(svgEl("line", {
+          x1: eyeX, y1: eyeY, x2: toX(row.D), y2: toY(row.hMinTable),
+          stroke: color, "stroke-width": row.n === 1 ? 2.2 : 1, opacity: row.n === 1 ? 1 : 0.45
+        }));
+      });
+
+      const arcR = 72;
+      const sweep = theta1 >= 0 ? 1 : 0;
+      const bx = eyeX + arcR * Math.cos(theta1);
+      const by = eyeY + arcR * Math.sin(theta1);
+      marks.push(svgEl("path", {
+        d: `M ${eyeX + arcR} ${eyeY} A ${arcR} ${arcR} 0 0 ${sweep} ${bx} ${by}`,
+        fill: "none", stroke: color, "stroke-width": 1.8
+      }));
+      marks.push(svgEl("circle", { cx: eyeX, cy: eyeY, r: 8, fill: "#172026" }));
+      marks.push(svgEl("circle", { cx: eyeX, cy: eyeY, r: 3, fill: "#fbf7f0" }));
+      marks.push(svgEl("text", {
+        x: eyeX, y: eyeY - 18, "text-anchor": "middle", fill: "#172026", "font-size": 13
+      }, "ตาผู้ปฏิบัติงาน"));
+      marks.push(svgEl("text", {
+        x: eyeX + 86, y: eyeY + (theta1 >= 0 ? 28 : -16), fill: color, "font-size": 20, "font-weight": 700,
+        "font-family": "ui-monospace, monospace"
+      }, fmtAngle(result.rows[0].thetaDeg)));
+
+      marks.push(dimH(tableY + 34, toX(result.rows[0].D), toX(result.rows[3].D), `ลึกแถว 1→2 ${fmt(p.firstPitch)} · แถวถัดไป ${fmt(p.rowPitch)}`));
+      marks.push(svgEl("text", {
+        x: 360, y: 24, "text-anchor": "middle", fill: "#5c656c", "font-size": 13
+      }, `θ = arctan((ความสูงตา − ความสูงป้าย) / ระยะมอง) · แถว 1 ${fmtAngle(result.rows[0].thetaDeg)}`));
+
+      return `<svg viewBox="0 0 720 500" xmlns="http://www.w3.org/2000/svg">${marks.join("")}</svg>`;
+    }
+
+    function render() {
+      FIELDS.forEach((field) => {
+        const label = sliders.querySelector(`[data-for="${field.key}"]`);
+        if (label) label.textContent = `${state[field.key]} ${field.unit}`;
+      });
+      const result = compute(state);
+      updateStatus(result);
+      document.getElementById("frontCanvas").innerHTML = renderFront(result);
+      document.getElementById("sideCanvas").innerHTML = renderSide(result);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    async function photoDataUri() {
+      const img = document.getElementById("photo");
+      if (img && img.complete && img.naturalWidth) {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext("2d").drawImage(img, 0, 0);
+          return canvas.toDataURL("image/png");
+        } catch (_) {
+          /* file:// อาจทาสีลง canvas ไม่ได้ */
+        }
+      }
+      try {
+        const res = await fetch((img && img.currentSrc) || "assets/reel-tote.png");
+        const blob = await res.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (_) {
+        return "";
+      }
+    }
+
+    async function exportHtml() {
+      const button = document.getElementById("exportBtn");
+      button.disabled = true;
+      button.textContent = "กำลังส่งออก…";
+      try {
+        const result = compute(state);
+        updateStatus(result);
+        const photo = await photoDataUri();
+        const stamp = new Date().toLocaleString("th-TH");
+        const fileStamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        const layoutLabel = state.layout === "stagger" ? "เยื้องป้าย" : "ไล่ระดับอัฒจันทร์";
+        const settings = [
+          `<tr><td>รูปแบบ</td><td>${escapeHtml(layoutLabel)}</td></tr>`,
+          `<tr><td>ความสูงใบป้าย</td><td>${TAG_H} มม.</td></tr>`,
+          ...FIELDS.map((field) => (
+            `<tr><td>${escapeHtml(field.label)}</td><td>${state[field.key]} ${escapeHtml(field.unit)}</td></tr>`
+          ))
+        ].join("");
+        const rows = result.rows.map((row) => {
+          const seen = row.n === 1 ? "ขอบบนรีล" : row.readableFront ? "เห็น Stockcode" : "ถูกบัง";
+          const cls = row.n === 1 || row.readableFront ? "ok" : "bad";
+          return `<tr>
+            <td>แถว ${row.n}</td>
+            <td>${STOCK[row.n - 1][0]} / ${STOCK[row.n - 1][1]}</td>
+            <td>${fmtAngle(row.thetaDeg)}</td>
+            <td>${row.n === 1 ? "—" : "+" + fmt(row.step)}</td>
+            <td>${fmt(row.hMinTable)}</td>
+            <td>${row.n === 1 ? "—" : fmt(row.peekFront)}</td>
+            <td class="${cls}">${seen}</td>
+          </tr>`;
+        }).join("");
+        const allVisible = result.rows.slice(1).every((row) => row.readableFront);
+        const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>รายงานมุมมองป้ายรีล SMT — ${escapeHtml(stamp)}</title>
+  <style>
+    :root { --ink:#1c2328; --muted:#5c656c; --line:#d5cbb8; --paper:#fbf7f0; --ok:#1f6b4a; --bad:#9b2226; }
+    * { box-sizing: border-box; }
+    body { font-family: Sarabun, "Noto Sans Thai", Tahoma, sans-serif; margin: 0; color: var(--ink); background: #efe8dc; }
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
+    h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    h2 { margin: 28px 0 10px; font-size: 1.1rem; }
+    .meta { color: var(--muted); margin-bottom: 20px; }
+    .status { padding: 12px 14px; border-radius: 10px; font-weight: 700; margin: 16px 0; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .status.ok { background: #e3f3ea; color: var(--ok); }
+    .status.bad { background: #f8e4e4; color: var(--bad); }
+    table { border-collapse: collapse; width: 100%; background: #fff; margin: 12px 0 24px; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f3eee4; }
+    .photo { max-width: 420px; border-radius: 12px; border: 1px solid var(--line); background: #111; }
+    .draw { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .draw figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 12px; }
+    img, svg { width: 100%; height: auto; display: block; }
+    @media (max-width: 800px) { .draw { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } main { padding: 0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>รายงานมุมมองป้ายรีล SMT และเส้นสายตา</h1>
+    <p class="meta">ส่งออก ${escapeHtml(stamp)} · ใบป้าย ${TAG_H} มม. · โหมด ${escapeHtml(layoutLabel)}</p>
+    ${photo ? `<p><img class="photo" src="${photo}" alt="กล่องรีล SMT" /></p>` : ""}
+    <div class="status ${allVisible ? "ok" : "bad"}">${escapeHtml(document.getElementById("status").textContent)}</div>
+    <h2>มุมองศาและความสูง</h2>
+    <p>มุมแถว 1: <strong>${fmtAngle(result.rows[0].thetaDeg)}</strong> · ขอบบนรีล: <strong>${fmt(result.h1 - result.p.tableHeight)}</strong></p>
+    <table>
+      <thead><tr><th>แถว</th><th>Stockcode</th><th>มุม</th><th>สูงกว่าแถว 1</th><th>ยอดป้าย</th><th>โผล่พ้นแถวหน้า</th><th>สถานะ</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <h2>ค่าที่ใช้คำนวณ</h2>
+    <table><tbody>${settings}</tbody></table>
+    <h2>แบบร่าง</h2>
+    <div class="draw">
+      <figure><h2>มุมมองด้านหน้า</h2>${document.getElementById("frontCanvas").innerHTML}</figure>
+      <figure><h2>มุมมองด้านข้างและเส้นสายตา</h2>${document.getElementById("sideCanvas").innerHTML}</figure>
+    </div>
+  </main>
+</body>
+</html>`;
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `smt-reel-sightline-${fileStamp}.html`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+      } finally {
+        button.disabled = false;
+        button.textContent = "ส่งออก HTML";
+      }
+    }
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      exportHtml().catch((error) => {
+        console.error(error);
+        alert("ส่งออก HTML ไม่สำเร็จ ลองเปิดผ่านเว็บเซิร์ฟเวอร์อีกครั้ง");
+      });
+    });
+
+    sliders.addEventListener("input", (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      state[input.name] = Number(input.value);
+      document.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("active"));
+      render();
+    });
+
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const name = button.dataset.preset;
+        const preset = { ...PRESETS[name] };
+        if (name === "straight") {
+          preset.eyeHeight = state.tableHeight + state.reelDiameter;
+        }
+        Object.assign(state, preset);
+        Object.entries(preset).forEach(([key, value]) => {
+          const input = sliders.querySelector(`[name="${key}"]`);
+          if (input) input.value = String(value);
+        });
+        document.querySelectorAll(".chip").forEach((chip) => chip.classList.toggle("active", chip === button));
+        render();
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>
