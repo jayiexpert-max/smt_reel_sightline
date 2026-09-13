@@ -454,6 +454,10 @@
       accent-color: var(--orange);
     }
 
+    label.field.is-unused {
+      opacity: 0.38;
+    }
+
     .drawings {
       display: grid;
       grid-template-columns: 1fr 1.15fr;
@@ -576,7 +580,7 @@
     <h1>มุมมองป้ายรีล SMT และเส้นสายตา</h1>
     <p>
       แบบร่างด้านหน้า ด้านข้าง และเส้นสายตาตรงของกล่องรีล ปรับจำนวนแถวได้
-      ใช้มุมมองระดับตาเป็นหลัก คำนวณว่าป้ายแถวหลังต้องสูงขึ้นเท่าใดจึงอ่านรหัสได้เมื่อมองตรง ไม่ใช้มุมก้มเป็นเกณฑ์หลัก
+      ใช้มุมมองระดับตาเป็นหลัก มีทั้งไล่ระดับอัฒจันทร์ และโหมดองศาเท่ากันที่บังคับมุม α เดียวทั้งแผง
     </p>
     <div class="hero-actions">
       <button type="button" class="btn-export" data-export="pdf">ส่งออก PDF</button>
@@ -626,7 +630,7 @@
       <article class="panel drawing">
         <div class="title">
           <h2>มุมมองด้านหน้า</h2>
-          <span class="hint">ไล่ระดับแบบอัฒจันทร์ ป้ายใบเท่ากัน โผล่พ้นแถวหน้าทีละขั้น</span>
+          <span class="hint" id="frontHint">ไล่ระดับแบบอัฒจันทร์ ป้ายใบเท่ากัน โผล่พ้นแถวหน้าทีละขั้น</span>
         </div>
         <div class="canvas" id="frontCanvas"></div>
       </article>
@@ -642,7 +646,8 @@
     <section class="panel controls">
       <div class="toolbar">
         <h2>ตั้งค่าตำแหน่งมอง</h2>
-        <button type="button" class="chip active" data-preset="rake">ไล่ระดับอัฒจันทร์</button>
+        <button type="button" class="chip" data-preset="rake">ไล่ระดับอัฒจันทร์</button>
+        <button type="button" class="chip active" data-preset="iso">องศาเท่ากัน</button>
         <button type="button" class="chip" data-preset="stagger">เยื้องป้าย</button>
         <button type="button" class="chip" data-preset="stand">ยืนที่โต๊ะ</button>
         <button type="button" class="chip" data-preset="sit">นั่งที่โต๊ะ</button>
@@ -684,7 +689,8 @@
       { key: "firstPitch", label: "ระยะลึกแถว 1 → แถว 2", unit: "มม.", min: 50, max: 200, step: 5, value: 100 },
       { key: "rowPitch", label: "ระยะลึกแถวถัดไป", unit: "มม.", min: 40, max: 180, step: 5, value: 80 },
       { key: "firstStep", label: "ระยะสูงแถว 1 → แถว 2", unit: "มม.", min: 0, max: 160, step: 2, value: 50 },
-      { key: "stepHeight", label: "ค่า C แถวถัดไป", unit: "มม.", min: 0, max: 80, step: 1, value: 25 }
+      { key: "stepHeight", label: "ค่า C แถวถัดไป", unit: "มม.", min: 0, max: 80, step: 1, value: 25 },
+      { key: "sightAngle", label: "มุม α ทั้งแผง (บวก = เงย)", unit: "°", min: -8, max: 25, step: 0.1, value: 18 }
     ];
 
     const ROW_PALETTE = [
@@ -714,21 +720,41 @@
       return ROW_PALETTE[index] || ROW_PALETTE[ROW_PALETTE.length - 1];
     }
 
+    function layoutName(layout) {
+      if (layout === "stagger") return "เยื้องป้าย";
+      if (layout === "iso") return "องศาเท่ากัน";
+      return "ไล่ระดับอัฒจันทร์";
+    }
+
+    function fmtSight(deg) {
+      const abs = Math.abs(deg);
+      if (abs < 0.05) return "0.0° ตรง";
+      return `${deg > 0 ? "เงย" : "ก้ม"} ${abs.toFixed(1)}°`;
+    }
+
+    function suggestedSightAngle(p) {
+      const pitch = Math.min(p.firstPitch || 80, p.rowPitch || 80);
+      const tag = p.tagHeight || 25;
+      return Math.round(Math.atan2(tag, pitch) * 180 / Math.PI * 10) / 10;
+    }
+
     const PRESETS = {
       rake: { layout: "rake", eyeHeight: 978, tableHeight: 800, viewDistance: 600, firstPitch: 100, rowPitch: 80, firstStep: 50, stepHeight: 25 },
+      iso: { layout: "iso", eyeHeight: 978, tableHeight: 800, viewDistance: 600, firstPitch: 100, rowPitch: 80 },
       stagger: { layout: "stagger", eyeHeight: 978, tableHeight: 800, viewDistance: 600, firstPitch: 100, rowPitch: 80, firstStep: 50, stepHeight: 25 },
       stand: { eyeHeight: 1550, tableHeight: 800, viewDistance: 600 },
       sit: { eyeHeight: 1200, tableHeight: 800, viewDistance: 500 }
     };
 
     const state = Object.fromEntries(FIELDS.map((field) => [field.key, field.value]));
-    state.layout = "rake";
+    state.layout = "iso";
+    state.sightAngle = suggestedSightAngle(state);
     const sliders = document.getElementById("sliders");
     sliders.innerHTML = FIELDS.map((field) => `
       <label class="field">
         ${field.label}
-        <span class="value" data-for="${field.key}">${field.value} ${field.unit}</span>
-        <input type="range" name="${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" value="${field.value}" />
+        <span class="value" data-for="${field.key}">${state[field.key]} ${field.unit}</span>
+        <input type="range" name="${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" value="${state[field.key]}" />
       </label>
     `).join("");
 
@@ -767,19 +793,34 @@
 
       const nRows = rowCountOf(p);
       p.rowCount = nRows;
+      const iso = p.layout === "iso";
+      const alphaRad = (Number(p.sightAngle) || 0) * Math.PI / 180;
       const rows = [];
       for (let i = 0; i < nRows; i += 1) {
         const D = i === 0 ? D1 : D1 + p.firstPitch + (i - 1) * p.rowPitch;
-        const rake = (p.layout || state.layout) !== "stagger";
-        const step = i === 0
-          ? 0
-          : rake
-            ? p.firstStep + (i - 1) * p.stepHeight
-            : p.firstStep;
-        const hMinTable = p.reelDiameter + step;
-        const hMin = p.tableHeight + hMinTable;
-        const thetaRad = Math.atan2(He - hMin, D);
-        const thetaDeg = thetaRad * 180 / Math.PI;
+        let step;
+        let hMinTable;
+        let hMin;
+        let thetaRad;
+        let thetaDeg;
+        if (iso) {
+          step = i === 0 ? 0 : p.tagHeight + (D - D1) * Math.tan(alphaRad);
+          hMinTable = p.reelDiameter + step;
+          hMin = p.tableHeight + hMinTable;
+          thetaRad = Math.atan2(He - hMin, D);
+          thetaDeg = -(Number(p.sightAngle) || 0);
+        } else {
+          const rake = (p.layout || state.layout) !== "stagger";
+          step = i === 0
+            ? 0
+            : rake
+              ? p.firstStep + (i - 1) * p.stepHeight
+              : p.firstStep;
+          hMinTable = p.reelDiameter + step;
+          hMin = p.tableHeight + hMinTable;
+          thetaRad = Math.atan2(He - hMin, D);
+          thetaDeg = thetaRad * 180 / Math.PI;
+        }
         rows.push({
           n: i + 1,
           D,
@@ -849,20 +890,24 @@
         return;
       }
 
-      document.getElementById("outTheta").textContent = fmtAngle(result.rows[0].thetaDeg);
+      document.getElementById("outTheta").textContent = fmtAngle(result.offStraightDeg);
       document.getElementById("outH1").textContent = fmt(result.h1 - result.p.tableHeight);
 
+      const layoutNow = result.p.layout || state.layout;
       body.innerHTML = result.rows.map((row) => {
         const statusCell = row.n === 1
           ? '<span class="ok">ขอบบนรีล</span>'
           : row.readableFront
             ? `<span class="ok">เห็น · โผล่ ${fmt(row.peekFront)}</span>`
             : `<span class="bad">ถูกบัง · โผล่ ${fmt(row.peekFront)} / ต้อง ${fmt(row.needPeek)}</span>`;
+        const stepCell = row.n === 1
+          ? "—"
+          : `${row.step >= 0 ? "+" : ""}${fmt(row.step)}`;
         return `<tr>
           <td>แถว ${row.n}</td>
           <td class="num">${stockAt(row.n - 1)[0]} / ${stockAt(row.n - 1)[1]}</td>
           <td class="num">${fmtAngle(row.thetaDeg)}</td>
-          <td class="num">${row.n === 1 ? "—" : "+" + fmt(row.step)}</td>
+          <td class="num">${stepCell}</td>
           <td class="num">${fmt(row.hMinTable)}</td>
           <td class="num">${row.n === 1 ? "—" : fmt(row.peekFront)}</td>
           <td>${statusCell}</td>
@@ -873,19 +918,24 @@
       const offNote = Math.abs(off) < 1.5
         ? "ตาอยู่ในระดับสายตาตรง"
         : off > 0
-          ? `ตาสูงกว่าขอบบนรีล ${fmt(result.He - result.h1)} มุมแถว 1 คือ ${fmtAngle(result.rows[0].thetaDeg)}`
-          : `ตาต่ำกว่าขอบบนรีล ${fmt(result.h1 - result.He)} มุมแถว 1 คือ ${fmtAngle(result.rows[0].thetaDeg)}`;
+          ? `ตาสูงกว่าขอบบนรีล ${fmt(result.He - result.h1)} มุมแถว 1 คือ ${fmtAngle(result.offStraightDeg)}`
+          : `ตาต่ำกว่าขอบบนรีล ${fmt(result.h1 - result.He)} มุมแถว 1 คือ ${fmtAngle(result.offStraightDeg)}`;
 
       const rear = result.rows.slice(1);
       const nRows = result.rows.length;
       const layout = result.p.layout || state.layout;
-      const spec = layout === "stagger"
-        ? `เยื้องป้าย ${nRows} แถว แถว 2–${nRows} โผล่เท่ากัน +${fmt(result.p.firstStep)} มุม ${rear.map((row) => fmtAngle(row.thetaDeg)).join(" / ")}`
-        : `ไล่ระดับอัฒจันทร์ ${nRows} แถว สูงกว่าขอบบน ${rear.map((row) => `แถว ${row.n} +${fmt(row.step)}`).join(" · ")} มุม ${rear.map((row) => fmtAngle(row.thetaDeg)).join(" / ")}`;
+      const spec = layout === "iso"
+        ? `องศาเท่ากันจากขอบบนรีล ${fmtSight(result.p.sightAngle)} · แถว 1 ชิดขอบ · แถวหลังพ้นยอดป้ายแถว 1 แล้วไล่ α · สูงกว่าขอบบน ${rear.map((row) => `แถว ${row.n} ${row.step >= 0 ? "+" : ""}${fmt(row.step)}`).join(" · ")}`
+        : layout === "stagger"
+          ? `เยื้องป้าย ${nRows} แถว แถว 2–${nRows} โผล่เท่ากัน +${fmt(result.p.firstStep)} มุม ${rear.map((row) => fmtAngle(row.thetaDeg)).join(" / ")}`
+          : `ไล่ระดับอัฒจันทร์ ${nRows} แถว สูงกว่าขอบบน ${rear.map((row) => `แถว ${row.n} +${fmt(row.step)}`).join(" · ")} มุม ${rear.map((row) => fmtAngle(row.thetaDeg)).join(" / ")}`;
       const blocked = result.rows.filter((row) => row.n > 1 && !row.readableFront);
       if (blocked.length) {
         status.className = "status fail";
-        status.textContent = `ถูกบัง: แถว ${blocked.map((row) => `${row.n} โผล่ ${fmt(row.peekFront)} ต้อง ${fmt(row.needPeek)}`).join(" · ")} — เลื่อนระยะสูงแถว 1→2 หรือค่า C ให้มากกว่าความสูงใบป้าย ${fmt(result.p.tagHeight)}`;
+        const hint = layout === "iso"
+          ? `เพิ่มมุม α ทั้งแผง หรือลดความสูงใบป้าย ${fmt(result.p.tagHeight)}`
+          : `เลื่อนระยะสูงแถว 1→2 หรือค่า C ให้มากกว่าความสูงใบป้าย ${fmt(result.p.tagHeight)}`;
+        status.textContent = `ถูกบัง: แถว ${blocked.map((row) => `${row.n} โผล่ ${fmt(row.peekFront)} ต้อง ${fmt(row.needPeek)}`).join(" · ")} — ${hint}`;
       } else {
         status.className = "status pass";
         status.textContent = `${spec} · ${offNote} · มุมด้านหน้าเห็น Stockcode ทั้ง ${nRows} แถว`;
@@ -995,8 +1045,9 @@
         marks.push(svgEl("circle", { cx, cy: reelCy, r: 12, fill: "#fff", stroke: "#2d3338" }));
         const tabH = tagH;
         const tabW = Math.max(56, Math.round(signW * 0.7));
+        const row1Top = rimY - tabH;
         marks.push(svgEl("rect", {
-          x: cx - tabW / 2, y: rimY - tabH, width: tabW, height: tabH,
+          x: cx - tabW / 2, y: row1Top, width: tabW, height: tabH,
           fill: "#fff", stroke: "#1c2328", "stroke-width": 1.5
         }));
         marks.push(svgEl("line", {
@@ -1004,7 +1055,7 @@
           stroke: "#c45c26", "stroke-width": 2.4
         }));
         marks.push(svgEl("text", {
-          x: cx, y: rimY - Math.max(12, tabH * 0.62),
+          x: cx, y: row1Top + Math.max(10, tabH * 0.4),
           "text-anchor": "middle",
           fill: "#1c2328",
           "font-size": tabH < 18 ? 7 : 8,
@@ -1012,7 +1063,7 @@
         }, stockAt(0)[col]));
         if (tabH >= 18) {
           marks.push(svgEl("text", {
-            x: cx, y: rimY - 5,
+            x: cx, y: row1Top + Math.max(18, tabH * 0.78),
             "text-anchor": "middle",
             fill: "#c45c26",
             "font-size": 10,
@@ -1050,27 +1101,36 @@
       const allOk = result.rows.slice(1).every((row) => row.readableFront);
       const color = allOk ? "#c45c26" : "#9b2226";
       const h1t = p.reelDiameter;
-      const theta1 = result.rows[0].thetaRad;
-      const drawDist = 200;
-      const frontX = 260;
-      const reelW = 36;
-      const tableY = 460;
+      const tagH = p.tagHeight;
+      const signTopOf = (row) => (row.n === 1 ? h1t + tagH : row.hMinTable);
+      const nRows = result.rows.length;
       const last = result.rows[result.rows.length - 1];
-      const eyeH = h1t + drawDist * Math.tan(theta1);
-      const maxH = Math.max(last.hMinTable, eyeH, h1t) + 55;
-      const scale = 340 / maxH;
+      const aimH = signTopOf(result.rows[0]);
+      const eyeH = p.eyeHeight - p.tableHeight;
+      const maxH = Math.max(last.hMinTable, aimH, eyeH, h1t, ...result.rows.map(signTopOf)) + 40;
+      const drawW = 640;
+      const listW = 300;
+      const viewW = drawW + listW;
+      const viewH = 520;
+      const tableY = 430;
+      const drawDist = 150;
+      const frontX = 200;
+      const reelW = nRows > 5 ? 28 : 36;
+      const scale = 300 / maxH;
       const span = Math.max(1, last.D - result.D1);
-      const xScale = Math.min(1, 380 / span);
+      const rowSpan = Math.min(70, 360 / Math.max(1, nRows - 1));
+      const xScale = rowSpan * Math.max(1, nRows - 1) / span;
       const toX = (worldX) => frontX + (worldX - result.D1) * xScale;
       const toY = (heightFromTable) => tableY - heightFromTable * scale;
       const eyeX = frontX - drawDist;
       const eyeY = toY(eyeH);
       const rimX = toX(result.D1);
       const rimY = toY(h1t);
-      const endX = toX(last.D) + 80;
+      const lastX = toX(last.D);
+      const endX = lastX + 36;
 
       const marks = [];
-      marks.push(svgEl("rect", { x: 40, y: tableY, width: 620, height: 18, fill: "#8b7355" }));
+      marks.push(svgEl("rect", { x: 24, y: tableY, width: drawW - 40, height: 16, fill: "#8b7355" }));
       marks.push(svgEl("rect", {
         x: frontX - 24,
         y: toY(result.toteHeight),
@@ -1095,11 +1155,17 @@
           "stroke-width": 1.5,
           rx: 4
         }));
-        const tagH = p.tagHeight;
         const tagSideW = Math.max(40, Math.round(p.tagWidth * 0.5));
+        const topH = signTopOf(row);
+        const botH = topH - tagH;
+        const tagTopY = toY(topH);
+        const tagBotY = toY(botH);
         if (row.n === 1) {
           marks.push(svgEl("rect", {
-            x: x - tagSideW / 2, y: reelTop - tagH * scale, width: tagSideW, height: Math.max(8, tagH * scale),
+            x: x - tagSideW / 2,
+            y: tagTopY,
+            width: tagSideW,
+            height: Math.max(8, tagBotY - tagTopY),
             fill: "#fff", stroke: "#1c2328", "stroke-width": 1.3
           }));
           marks.push(svgEl("line", {
@@ -1107,7 +1173,7 @@
             stroke: "#c45c26", "stroke-width": 2.4
           }));
           marks.push(svgEl("text", {
-            x, y: reelTop - 5,
+            x, y: tagTopY + 10,
             "text-anchor": "middle",
             "font-size": 8,
             "font-weight": 700,
@@ -1116,29 +1182,27 @@
           }, stockAt(0)[0]));
         } else {
           const style = rowStyle(row.n - 1);
-          const stepTop = toY(row.hMinTable);
-          const stepBot = toY(Math.max(0, row.hMinTable - tagH));
-          const prevH = result.rows[row.n - 2].hMinTable;
+          const prevTop = signTopOf(result.rows[row.n - 2]);
           marks.push(svgEl("rect", {
             x: x - 22,
-            y: toY(row.hMinTable),
+            y: tagTopY,
             width: 44,
-            height: Math.max(4, toY(prevH) - toY(row.hMinTable)),
+            height: Math.max(4, toY(prevTop) - tagTopY),
             fill: "#c8b89a",
             stroke: "#6b5b43",
             "stroke-width": 1
           }));
           marks.push(svgEl("rect", {
             x: x - tagSideW / 2,
-            y: stepTop,
+            y: tagTopY,
             width: tagSideW,
-            height: Math.max(10, stepBot - stepTop),
+            height: Math.max(10, tagBotY - tagTopY),
             fill: style.fill,
             stroke: "#1c2328",
             "stroke-width": 1.4
           }));
           marks.push(svgEl("text", {
-            x, y: stepTop + 12,
+            x, y: tagTopY + 12,
             "text-anchor": "middle",
             "font-size": 8,
             "font-weight": 700,
@@ -1147,34 +1211,35 @@
           }, stockAt(row.n - 1)[0]));
         }
         marks.push(svgEl("circle", {
-          cx: x, cy: toY(row.hMinTable), r: 4.5,
+          cx: x, cy: tagTopY, r: 4,
           fill: row.n === 1 ? color : "#0b6e99"
         }));
         marks.push(svgEl("text", {
-          x: x + 42, y: toY(row.hMinTable) - 8,
+          x, y: tagTopY - 6,
+          "text-anchor": "middle",
           fill: "#0b6e99",
-          "font-size": 11,
-          "font-weight": 700,
-          "font-family": "ui-monospace, monospace"
-        }, `${stockAt(row.n - 1)[0]}  ${fmtAngle(row.thetaDeg)}`));
+          "font-size": 9,
+          "font-weight": 700
+        }, `แถว ${row.n}`));
       });
 
       marks.push(svgEl("line", {
         x1: eyeX, y1: eyeY, x2: endX, y2: eyeY,
         stroke: "#98a0a6", "stroke-width": 1.2, "stroke-dasharray": "5 4"
       }));
-      const slope = (rimY - eyeY) / ((rimX - eyeX) || 1);
+      const slope = (toY(aimH) - eyeY) / ((rimX - eyeX) || 1);
       marks.push(svgEl("line", {
         x1: eyeX, y1: eyeY, x2: endX, y2: eyeY + (endX - eyeX) * slope,
         stroke: color, "stroke-width": 2.4, "stroke-dasharray": "8 5"
       }));
       result.rows.forEach((row) => {
         marks.push(svgEl("line", {
-          x1: eyeX, y1: eyeY, x2: toX(row.D), y2: toY(row.hMinTable),
+          x1: eyeX, y1: eyeY, x2: toX(row.D), y2: toY(signTopOf(row)),
           stroke: color, "stroke-width": row.n === 1 ? 2.2 : 1, opacity: row.n === 1 ? 1 : 0.45
         }));
       });
 
+      const theta1 = Math.atan2(eyeH - aimH, drawDist);
       const arcR = 72;
       const sweep = theta1 >= 0 ? 1 : 0;
       const bx = eyeX + arcR * Math.cos(theta1);
@@ -1193,25 +1258,69 @@
         "font-family": "ui-monospace, monospace"
       }, fmtAngle(result.rows[0].thetaDeg)));
 
-      marks.push(dimH(tableY + 34, toX(result.rows[0].D), toX(last.D), `ลึกแถว 1→2 ${fmt(p.firstPitch)} · แถวถัดไป ${fmt(p.rowPitch)} · ${result.rows.length} แถว`));
+      marks.push(dimH(tableY + 32, toX(result.rows[0].D), lastX, `ลึก 1→2 ${fmt(p.firstPitch)} · ถัดไป ${fmt(p.rowPitch)} · ${nRows} แถว`));
       marks.push(svgEl("text", {
-        x: 360, y: 24, "text-anchor": "middle", fill: "#5c656c", "font-size": 13
-      }, `θ = arctan((ความสูงตา − ความสูงป้าย) / ระยะมอง) · แถว 1 ${fmtAngle(result.rows[0].thetaDeg)}`));
+        x: drawW / 2, y: 22, "text-anchor": "middle", fill: "#5c656c", "font-size": 12
+      }, p.layout === "iso"
+        ? `แถว 1 ชิดขอบบนรีล · hn = ขอบบนรีล + T + (Dn − D1) · tan(α) · α = ${fmtSight(p.sightAngle)}`
+        : `θ = arctan((ความสูงตา − ความสูงป้าย) / ระยะมอง) · แถว 1 ${fmtAngle(result.rows[0].thetaDeg)}`));
 
-      return `<svg viewBox="0 0 720 500" xmlns="http://www.w3.org/2000/svg">${marks.join("")}</svg>`;
+      const listX = drawW + 8;
+      marks.push(svgEl("rect", {
+        x: listX, y: 16, width: listW - 20, height: viewH - 36,
+        fill: "#fff", stroke: "#d5cbb8", rx: 10
+      }));
+      marks.push(svgEl("text", {
+        x: listX + 14, y: 38, fill: "#1c2328", "font-size": 13, "font-weight": 700
+      }, `ข้อมูลทั้ง ${nRows} แถว`));
+      const heads = [["แถว", 14], ["มุม", 48], ["สูงจากขอบ", 108], ["โผล่", 200]];
+      heads.forEach(([label, dx]) => {
+        marks.push(svgEl("text", {
+          x: listX + dx, y: 58, fill: "#5c656c", "font-size": 10, "font-weight": 700
+        }, label));
+      });
+      result.rows.forEach((row, i) => {
+        const y = 78 + i * Math.min(48, (viewH - 120) / nRows);
+        const peek = row.n === 1 ? "ขอบบนรีล" : fmt(row.peekFront);
+        const codes = stockAt(row.n - 1);
+        marks.push(svgEl("text", {
+          x: listX + 14, y, fill: "#1c2328", "font-size": 12, "font-weight": 700
+        }, `${row.n}`));
+        marks.push(svgEl("text", {
+          x: listX + 48, y, fill: "#0b6e99", "font-size": 11, "font-weight": 700,
+          "font-family": "ui-monospace, monospace"
+        }, fmtAngle(row.thetaDeg)));
+        marks.push(svgEl("text", {
+          x: listX + 108, y, fill: "#1c2328", "font-size": 11,
+          "font-family": "ui-monospace, monospace"
+        }, row.n === 1 ? fmt(p.reelDiameter) : "+" + fmt(row.step)));
+        marks.push(svgEl("text", {
+          x: listX + 200, y, fill: row.n === 1 || row.readableFront ? "#1f6b4a" : "#9b2226",
+          "font-size": 11, "font-weight": 700
+        }, peek));
+        marks.push(svgEl("text", {
+          x: listX + 14, y: y + 16, fill: "#5c656c", "font-size": 9,
+          "font-family": "ui-monospace, monospace"
+        }, `${codes[0]} / ${codes[1]}`));
+      });
+
+      return `<svg viewBox="0 0 ${viewW} ${viewH}" xmlns="http://www.w3.org/2000/svg">${marks.join("")}</svg>`;
     }
 
     function formulaHtml(result) {
       const p = result.p || state;
-      const layout = p.layout === "stagger" ? "เยื้องป้าย" : "ไล่ระดับอัฒจันทร์";
+      const layout = layoutName(p.layout);
       const T = p.tagHeight;
       const W = p.tagWidth;
+      const iso = p.layout === "iso";
       let worked = "<p>ใส่ระยะมองมากกว่า 0 เพื่อแสดงตัวเลขตามค่าปัจจุบัน</p>";
       if (result.ok) {
         const r = result.rows;
         const lines = [
           `N = ${r.length} แถว · T = ${T} มม. · W = ${W} มม. · โหมด ${layout}`,
-          `h1 = ${p.tableHeight} + ${p.reelDiameter} = ${fmt(result.h1)} จากพื้น · ${fmt(p.reelDiameter)} จากโต๊ะ`,
+          iso
+            ? `α = ${fmtSight(p.sightAngle)} · แถว 1 ชิดขอบบนรีล · hn = ขอบบนรีล + T + (Dn − D1) · tan(α)`
+            : `h1 = ${p.tableHeight} + ${p.reelDiameter} = ${fmt(result.h1)} จากพื้น · ${fmt(p.reelDiameter)} จากโต๊ะ`,
           `He = ${fmt(p.eyeHeight)} · D1 = ${fmt(p.viewDistance)}`,
           ...r.map((row) => {
             const peek = row.n === 1 ? "—" : `${fmt(row.peekFront)} ≥ ${fmt(row.needPeek)} → ${row.readableFront ? "เห็น" : "ถูกบัง"}`;
@@ -1220,34 +1329,43 @@
         ];
         worked = lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
       }
-      return `
-        <article class="formula-card">
+      const heightCard = iso
+        ? `<article class="formula-card">
+          <h3>ความสูงป้าย · องศาเท่ากัน</h3>
+          <p>แถว 1 ชิด<strong>ขอบบนรีล</strong> <code>h1 = โต๊ะ + Øรีล</code></p>
+          <p>แถวหลังอยู่บนเส้นตรงมุม <code>α</code> จากขอบนั้น</p>
+          <p>แถวหลังพ้นยอดป้ายแถว 1 ก่อน แล้วไล่ <code>α</code></p>
+          <p><code>hn = ขอบบนรีล + T + (Dn − D1) · tan(α)</code></p>
+        </article>`
+        : `<article class="formula-card">
           <h3>ความสูงป้าย</h3>
           <p><code>h1 = ความสูงโต๊ะ + Øรีล</code></p>
           <p>ไล่ระดับ: <code>hn = h1 + C1 + (n − 2) · C</code> เมื่อ n ≥ 2</p>
           <p>เยื้องป้าย: <code>hn = h1 + C1</code> ทุกแถวหลัง</p>
           <p>C1 = ระยะสูงแถว 1→2 · C = ค่าไล่แถวถัดไป · จำนวนแถวปรับได้</p>
-        </article>
+        </article>`;
+      return `
+        ${heightCard}
         <article class="formula-card">
           <h3>ระยะมองและมุม</h3>
           <p><code>D1</code> = ระยะถึงป้ายแถว 1</p>
           <p><code>Dn = D1 + P1 + (n − 2) · P</code> เมื่อ n ≥ 2</p>
-          <p><code>θn = arctan((He − hn) / Dn)</code></p>
+          <p>${iso ? "มุมแผง <code>α</code> เท่ากันทั้งแถว · มุมจากตาไปขอบรีลคิดแยก" : "<code>θn = arctan((He − hn) / Dn)</code>"}</p>
           <p>บวก = ก้ม · ลบ = เงย · 0° = สายตาตรง</p>
         </article>
         <article class="formula-card">
           <h3>ขนาดป้ายและเกณฑ์เห็น</h3>
           <p>ใบป้ายกว้าง <code>W = ${W} มม.</code> สูง <code>T = ${T} มม.</code></p>
           <p>แถวหลังต้องโผล่พ้นแถวหน้า <code>peek ≥ T</code></p>
-          <p>ไล่ระดับ: <code>peek = hn − h(n−1)</code></p>
-          <p>เยื้องป้าย: เทียบกับแถว 1 · ถ้าถูกบังให้เพิ่ม C1 หรือลด T</p>
+          <p>${iso ? "<code>peek = T + (Dn − D(n−1)) · tan(α)</code> เทียบยอดป้ายแถวหน้า" : "ไล่ระดับ: <code>peek = hn − h(n−1)</code>"}</p>
+          <p>${iso ? "α ขั้นต่ำประมาณ <code>arctan(T / ระยะลึกแถวสั้นสุด)</code>" : "เยื้องป้าย: เทียบกับแถว 1 · ถ้าถูกบังให้เพิ่ม C1 หรือลด T"}</p>
         </article>
         <article class="formula-card">
           <h3>ทำอย่างไรไม่ให้สูงเกิน</h3>
           <ol>
-            <li>ตั้งขนาดใบป้ายตามของจริง แล้วให้ C1 และ C ≥ ความสูงใบป้าย</li>
-            <li>แถว 2 ใช้ C1 ก้าวแรก แถวถัดไปไล่ด้วย C ปรับจำนวนแถวได้ 2–8 แถว</li>
-            <li>ถ้ายังสูงไป ลด C หรือใช้โหมดเยื้องป้าย</li>
+            ${iso
+              ? "<li>แถว 1 ชิดขอบรีล แล้วไล่แถวหลังด้วย α เดียวกัน</li><li>ถ้าแถวหลังถูกบัง ให้เพิ่ม α หรือลดความสูงใบป้าย</li><li>ระยะลึกยังปรับได้ แต่ไม่ใช้ C1 และ C</li>"
+              : "<li>ตั้งขนาดใบป้ายตามของจริง แล้วให้ C1 และ C ≥ ความสูงใบป้าย</li><li>แถว 2 ใช้ C1 ก้าวแรก แถวถัดไปไล่ด้วย C ปรับจำนวนแถวได้ 2–8 แถว</li><li>ถ้ายังสูงไป ลด C หรือใช้โหมดเยื้องป้าย / องศาเท่ากัน</li>"}
           </ol>
         </article>
         <article class="formula-card formula-worked">
@@ -1261,11 +1379,32 @@
       if (box) box.innerHTML = formulaHtml(result);
     }
 
+    function syncLayoutFields() {
+      const iso = state.layout === "iso";
+      const unused = iso ? ["firstStep", "stepHeight"] : ["sightAngle"];
+      FIELDS.forEach((field) => {
+        const wrap = sliders.querySelector(`[name="${field.key}"]`)?.closest("label");
+        if (wrap) wrap.classList.toggle("is-unused", unused.includes(field.key));
+      });
+      const hint = document.getElementById("frontHint");
+      if (hint) {
+        hint.textContent = iso
+          ? "แถว 1 ชิดขอบบนรีล แถวหลังโผล่พ้นป้ายแถว 1 แล้วไล่มุม α"
+          : state.layout === "stagger"
+            ? "เยื้องป้าย แถวหลังโผล่เท่ากันเทียบแถว 1"
+            : "ไล่ระดับแบบอัฒจันทร์ ป้ายใบเท่ากัน โผล่พ้นแถวหน้าทีละขั้น";
+      }
+    }
+
     function render() {
       FIELDS.forEach((field) => {
         const label = sliders.querySelector(`[data-for="${field.key}"]`);
-        if (label) label.textContent = `${state[field.key]} ${field.unit}`;
+        if (!label) return;
+        label.textContent = field.key === "sightAngle"
+          ? fmtSight(state[field.key])
+          : `${state[field.key]} ${field.unit}`;
       });
+      syncLayoutFields();
       const result = compute(state);
       updateStatus(result);
       renderFormula(result);
@@ -1372,7 +1511,7 @@
 
     function buildReportPages(result) {
       const stamp = new Date().toLocaleString("th-TH");
-      const layoutLabel = state.layout === "stagger" ? "เยื้องป้าย" : "ไล่ระดับอัฒจันทร์";
+      const layoutLabel = layoutName(state.layout);
       const statusEl = document.getElementById("status");
       const statusClass = statusEl ? statusEl.className.replace("status", "pdf-status") : "pdf-status";
       const statusText = statusEl ? statusEl.textContent : "";
@@ -1524,7 +1663,7 @@
         const photo = await photoDataUri();
         const stamp = new Date().toLocaleString("th-TH");
         const fileStamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-        const layoutLabel = state.layout === "stagger" ? "เยื้องป้าย" : "ไล่ระดับอัฒจันทร์";
+        const layoutLabel = layoutName(state.layout);
         const settings = [
           `<tr><td>รูปแบบ</td><td>${escapeHtml(layoutLabel)}</td></tr>`,
           ...FIELDS.map((field) => (
@@ -1532,13 +1671,16 @@
           ))
         ].join("");
         const rows = result.ok ? result.rows.map((row) => {
-          const seen = row.n === 1 ? "ขอบบนรีล" : row.readableFront ? "เห็น Stockcode" : "ถูกบัง";
+          const seen = row.n === 1
+            ? "ขอบบนรีล"
+            : row.readableFront ? "เห็น Stockcode" : "ถูกบัง";
           const cls = row.n === 1 || row.readableFront ? "ok" : "bad";
+          const stepCell = row.n === 1 ? "—" : `${row.step >= 0 ? "+" : ""}${fmt(row.step)}`;
           return `<tr>
             <td>แถว ${row.n}</td>
             <td>${stockAt(row.n - 1)[0]} / ${stockAt(row.n - 1)[1]}</td>
             <td>${fmtAngle(row.thetaDeg)}</td>
-            <td>${row.n === 1 ? "—" : "+" + fmt(row.step)}</td>
+            <td>${stepCell}</td>
             <td>${fmt(row.hMinTable)}</td>
             <td>${row.n === 1 ? "—" : fmt(row.peekFront)}</td>
             <td class="${cls}">${seen}</td>
@@ -1685,7 +1827,14 @@
       const input = event.target;
       if (!(input instanceof HTMLInputElement)) return;
       state[input.name] = Number(input.value);
-      document.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("active"));
+      if (input.name === "sightAngle") state.layout = "iso";
+      if (input.name === "firstStep" || input.name === "stepHeight") {
+        if (state.layout === "iso") state.layout = "rake";
+      }
+      document.querySelectorAll(".chip").forEach((chip) => {
+        const preset = chip.dataset.preset;
+        chip.classList.toggle("active", preset === state.layout);
+      });
       render();
     });
 
@@ -1695,6 +1844,9 @@
         const preset = { ...PRESETS[name] };
         if (name === "straight") {
           preset.eyeHeight = state.tableHeight + state.reelDiameter;
+        }
+        if (name === "iso") {
+          preset.sightAngle = suggestedSightAngle({ ...state, ...preset });
         }
         Object.assign(state, preset);
         Object.entries(preset).forEach(([key, value]) => {
